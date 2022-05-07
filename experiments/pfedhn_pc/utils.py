@@ -1,4 +1,5 @@
 import torch
+from collections import OrderedDict
 from model import *
 
 def create_client(server=server, num_client=num_client, **args):
@@ -12,5 +13,17 @@ def create_client(server=server, num_client=num_client, **args):
 
 
         
-def LocalUpdate(server):
     
+
+def get_average_model(model_list):
+    res = OrderedDict()
+    for model in model_list:
+        for k, v in model.state_dict():
+            if k in res.keys():
+                res[k] += v
+            else:
+                res[k] = v
+    
+    length = len(model_list)
+    for k,v in res.items():
+        v = torch.div(v, length)
