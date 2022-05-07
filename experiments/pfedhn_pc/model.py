@@ -2,6 +2,7 @@ from typing import OrderedDict
 import torch
 from torch import nn
 
+from utils import
 from reformer_pytorch import Reformer, Recorder
 from kmeans import KMeans
 from train import inter_cluster_attn
@@ -24,11 +25,10 @@ class Client():
         self.train_data = {}
         self.client_emb_vec = []
     
-"""
-Cluster
-Perform intra-cluster attention weighting
+    def train():
+        pass
+    
 
-"""
 class Cluster():
     def __init__(self, cluster_model, c_id):
         self.cluster_id = c_id
@@ -68,21 +68,6 @@ class Server():
             self.base_layer = torch.div(self.base_layer, self.num_clients)
             self.per_layer = torch.div(self.per_layer, self.num_clients)
     
-    def get_average_model(self, model_list):
-        res = OrderedDict()
-        for model in model_list:
-            for k, v in model.state_dict():
-                if k in res.keys():
-                    res[k] += v
-                else:
-                    res[k] = v
-        
-        length = len(model_list)
-        for k,v in res.items():
-            v = torch.div(v, length)
-                
-        return res
-    
     def form_cluster(self):
         #compute similarity k-means
         kmeans = KMeans(n_clusters=self.num_cluster, mode='euclidean')
@@ -97,7 +82,9 @@ class Server():
             model_list = []
             for client in cluster.client_list:
                 model_list.append(client.per_layer())
-            cluster.per_layer = self.get_average_model(model_list)
+            #cluster.per_layer is the centroid per_model for clients within cluster
+            cluster.per_layer = get_average_model(model_list)
+
                   
             
 
