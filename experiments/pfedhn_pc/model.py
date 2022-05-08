@@ -2,7 +2,7 @@ from typing import OrderedDict
 import torch
 from torch import nn
 
-from utils import
+from utils import *
 from reformer_pytorch import Reformer, Recorder
 from kmeans import KMeans
 from train import inter_cluster_attn
