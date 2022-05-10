@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.utils.data
+from experiments.pfedhn_pc.utils import get_average_model, weighted_aggregate_model
 from tqdm import trange
 
 from experiments.pfedhn_pc.models import CNNHyperPC, CNNTargetPC, CNNTargetPC_M, LocalLayer
@@ -15,6 +16,7 @@ from experiments.pfedhn_pc.node import BaseNodesForLocal, BaseNodesForLocals_M
 from experiments.utils import get_device, set_logger, set_seed, str2bool
 
 import copy
+from model import *
 from utils import get_model
 
 def eval_model(nodes, num_nodes, inet, net, criteria, device, split):
@@ -74,6 +76,7 @@ def train(data_name: str, data_path: str, classes_per_node: int, num_nodes: int,
     # init nodes, inet, local net #
     ###############################
 
+
     nodes = BaseNodesForLocals_M(
         data_name=data_name,
         data_path=data_path,
@@ -124,6 +127,16 @@ def train(data_name: str, data_path: str, classes_per_node: int, num_nodes: int,
     step_iter = trange(steps)
 
     results = defaultdict(list)
+
+    net_keys = [*inet.state_dict().keys()]
+    base_layer_keys = net_keys[:-2]
+    per_layer_keys = net_keys[-2:]
+
+    net_values = [*inet.state_dict().values()]
+    base_values = net_values[:-2]
+    per_values = net_values[-2:]
+
+    server = Server(base_values, num_client=100, pre_update_eps=100, per_layer=per_values, num_cluster=10)
     for step in step_iter:
         inet.train()
 
@@ -134,7 +147,7 @@ def train(data_name: str, data_path: str, classes_per_node: int, num_nodes: int,
 
         # NOTE: evaluation on sent model
         with torch.no_grad():
-            for n in nodes.model:
+            for n in nodes.models:
                 n.eval()
             inet.eval()
             batch = next(iter(nodes.test_loaders[node_id]))
@@ -155,19 +168,21 @@ def train(data_name: str, data_path: str, classes_per_node: int, num_nodes: int,
             batch = next(iter(nodes.train_loaders[node_id]))
             img, label = tuple(t.to(device) for t in batch)
 
-            pred = nodes.model[node_id](img)
+            pred = nodes.models[node_id](img)
 
             loss = criteria(pred, label)
             loss.backward()
 
             nodes.local_optimizers[node_id].step()
 
-        for w_local in nodes.model:
+        for w_local in nodes.models:
             if w_glob is None:
                 w_glob = copy.deepcopy(w_local)
             else:
                 for k in w_glob.keys():
                     w_glob[k] += w_local[k]
+        
+        inet.load_state_dict(w_glob)
 
 
         step_iter.set_description(
@@ -227,7 +242,115 @@ def train(data_name: str, data_path: str, classes_per_node: int, num_nodes: int,
         results['test_best_max_based_on_step'].append(test_best_max_based_on_step)
         results['test_best_std_based_on_step'].append(test_best_std_based_on_step)
 
+    emb_layer = nn.Linear(len(nn.utils.parameters_to_vector(per_values)), 128)
+    #embed client
+    emb_vectors = []
+    for m in nodes.models:#parallalise
+        net_values = [*m.state_dict().values()]
+        per_values = net_values[-2:]
+        emb_vectors.append(emb_layer(nn.utils.parameters_to_vector(per_values)))
+
     for step in step_attn_avg: 
+        server.client_emb_list = emb_vectors
+        server.form_cluster()
+        least_cluster_len = 0
+        for cl in server.cluster_list:
+            least_cluster_len = min(least_cluster_len, len(cl))
+        #local updates
+        for i in range(inner_steps):
+            for n in nodes.model:
+                n.train()
+
+            nodes.local_optimizers[node_id].zero_grad()
+
+            batch = next(iter(nodes.train_loaders[node_id]))
+            img, label = tuple(t.to(device) for t in batch)
+
+            pred = nodes.models[node_id](img)
+
+            loss = criteria(pred, label)
+            loss.backward()
+
+            nodes.local_optimizers[node_id].step()
+
+        avg_model = get_average_model(nodes.models) 
+        inet.load_state_dict(avg_model)
+
+        #attention input: seq of emb_cluster and emb_clients_incluster
+        emb_vectors = []
+        for m in nodes.models:#parallalise
+            net_values = [*m.state_dict().values()]
+            per_values = net_values[-2:]
+            emb_vectors.append(emb_layer(nn.utils.parameters_to_vector(per_values)))
+
+        # get cluster embedding
+        # cluster_emb = avg(client_emb)
+        c_emb_list = []
+        for cluster in server.cluster_list:
+            for c in cluster.client_list:
+                if emb_v_c is None:
+                    emb_v_c = emb_vectors[c.id]
+                else:
+                    emb_v_c += emb_vectors[c.id]
+            c_emb = torch.div(emb_v_c, len(c))
+            c_emb_list.append(c_emb)
+
+        cluster_num = len(server.cluster_list)
+        c_model_list = [c.model for c in server.cluster_list]
+
+        #nodes aggregation
+        inter_attn = LSH_Attention(
+            dim = 128,
+            heads = 8,
+            bucket_size = cluster_num / 2, #seqlen % (bucket_size * 2) == 0
+            n_hashes = 8,
+            return_attn = True
+        )
+
+        # inter-cluste-attn-aggregation
+        # unsqueeze list to (batch_size=1, seqlen, dim)
+        # fit input size for attn
+        _, inter_attn_mat, _ = inter_attn(c_emb_list.unsqueeze(0))
+        for i in range(cluster_num):
+            weight_list = inter_attn_mat[0,i,:]
+            server.cluster_list[i].model = weighted_aggregate_model(c_model_list, weight_list)
+
+
+        # intra-cluster-attn-aggregation
+        # c_emb_vec stands for cluster embedding vector
+        for cluster in server.cluster_list:
+            cluster_emb_list = []
+            # least_cluster_len for shortest cluster 
+            # for better design, we should fix seq_len of participated client
+            # padding with zeros
+            # during attention period, we just mask them out
+            intra_seq_len = 10
+            pad_cluster = False
+            # random choice may cause duplicated?
+            idx_list = [random.choice(range(len(cluster.client_list))) for _ in range(intra_seq_len)]
+            client_model_list = []
+            for i in idx_list:
+                c_id = cluster.client_list[i].id
+                c_emb_vec = emb_vectors[c_id]    
+                cluster_emb_list.append(c_emb_vec)
+                client_model_list.append(nodes.models[c.id])
+
+            _, intra_attn_mat, _ = LSH_Attention(
+                dim = 128,
+                heads = 8,
+                bucket_size = intra_seq_len, #seqlen % (bucket_size * 2) == 0
+                n_hashes = 8,
+                return_attn = True
+            )
+
+            # model aggregation or grad aggregation?
+            for i in range(intra_seq_len):
+                weight_list = intra_attn_mat[0,i,:]
+                server.cluster_list[i].model = weighted_aggregate_model(c_model_list, weight_list)
+
+
+        
+        
         
 
     save_path = Path(save_path)

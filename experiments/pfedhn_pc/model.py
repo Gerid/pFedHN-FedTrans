@@ -18,7 +18,7 @@ class Client():
         self.base_layer = base_layer
         self.base_optimzer = base_optimizer
         self.per_layer = cluster_per_layer
-        self.per_optimizer = base_optimizer(self.per_layer.parameters, **optimizer_config)
+        self.per_optimizer = base_optimizer(self.per_layer.parameters(), **optimizer_config)
 
         self.id = id #string
         self.cluster_id = -1 # default:-1, before form of cluster
@@ -27,6 +27,9 @@ class Client():
     
     def train():
         pass
+
+    def emb_params():
+        embed_vec()
     
 
 class Cluster():
@@ -71,7 +74,7 @@ class Server():
     def form_cluster(self):
         #compute similarity k-means
         kmeans = KMeans(n_clusters=self.num_cluster, mode='euclidean')
-        client_emb_list = [client.emb_vec for client in self.client_list]
+        client_emb_list = self.client_emb_list 
 
         cluster_res = kmeans.fit_predict(client_emb_list)
         for client_id, cluster_id in enumerate(cluster_res):
