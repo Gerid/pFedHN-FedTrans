@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.utils.data
-from experiments.pfedhn_pc.utils import get_average_model
+from experiments.pfedhn_pc.utils import get_average_model, weighted_aggregate_model
 from tqdm import trange
 
 from experiments.pfedhn_pc.models import CNNHyperPC, CNNTargetPC, CNNTargetPC_M, LocalLayer
@@ -270,22 +270,54 @@ def train(data_name: str, data_path: str, classes_per_node: int, num_nodes: int,
 
             nodes.local_optimizers[node_id].step()
 
-            avg_model = get_average_model(nodes.models) 
-
+        avg_model = get_average_model(nodes.models) 
         inet.load_state_dict(avg_model)
+
+        #attention input: seq of emb_cluster and emb_clients_incluster
+        emb_vectors = []
+        for m in nodes.models:#parallalise
+            net_values = [*m.state_dict().values()]
+            per_values = net_values[-2:]
+            emb_vectors.append(emb_layer(nn.utils.parameters_to_vector(per_values)))
+
+        # get cluster embedding
+        # cluster_emb = avg(client_emb)
+        c_emb_list = []
         for cluster in server.cluster_list:
-            cluster = torch.sum(emb_vector())
+            for c in cluster.client_list:
+                if emb_v_c is None:
+                    emb_v_c = emb_vectors[c.id]
+                else:
+                    emb_v_c += emb_vectors[c.id]
+            c_emb = torch.div(emb_v_c, len(c))
+            c_emb_list.append(c_emb)
+
+        cluster_num = len(server.cluster_list)
+        c_model_list = [c.model for c in server.cluster_list]
+
         #nodes aggregation
-        cluster_emb
         inter_attn = LSH_Attention(
             dim = 128,
             heads = 8,
-            bucket_size = 5, #seqlen % (bucket_size * 2) == 0
+            bucket_size = cluster_num / 2, #seqlen % (bucket_size * 2) == 0
             n_hashes = 8,
             return_attn = True
         )
-        _, inter_attn_mat, _ = inter_attn(cluster_emb_list)
-        intra_attn = LSH_Attention()
+
+        # inter-cluste-attn-aggregation
+        # unsqueeze list to (batch_size=1, seqlen, dim)
+        # fit input size for attn
+        _, inter_attn_mat, _ = inter_attn(c_emb_list.unsqueeze(0))
+        for i in range(cluster_num):
+            weight_list = inter_attn_mat[0,i,:]
+            server.cluster_list[i].model = weighted_aggregate_model([m for m.per_layer in server.cluster_list[i].client_list], weight_list)
+
+
+        # intra-cluster-attn-aggregation
+        for cluster in server.cluster_list:
+            for c in cluster.client_list:
+                c.per_layer =
+            intra_attn = LSH_Attention()
 
         
         

@@ -29,3 +29,17 @@ def get_average_model(model_list):
     for k,v in res.items():
         v = torch.div(v, length)
     return res
+
+def weighted_aggregate_model(model_list, weight_list):
+    res = OrderedDict()
+    for (w, model) in zip(weight_list, model_list):
+        for k, v in model.state_dict():
+            if k in res.keys():
+                res[k] += w*v
+            else:
+                res[k] = w*v
+    
+    length = len(model_list)
+    for k,v in res.items():
+        v = torch.div(v, length)
+    return res
