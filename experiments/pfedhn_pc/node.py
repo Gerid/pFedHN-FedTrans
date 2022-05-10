@@ -60,9 +60,9 @@ class BaseNodesForLocals_M:
         self.n_nodes = n_nodes
         self.classes_per_node = classes_per_node
         self.batch_size = batch_size
-
-        self.net = [
-            base_model(**layer_config).to(device) for _ in range(self.n_nodes)
+    
+        self.models = [
+            self.base_model(**layer_config).to(device) for _ in range(self.n_nodes)
         ]
         self.local_optimizers = [
             base_optimizer(self.local_layers[i].parameters(), **optimizer_config) for i in range(self.n_nodes)
