@@ -5,7 +5,6 @@ from torch import nn
 from utils import *
 from reformer_pytorch import Reformer, Recorder
 from kmeans import KMeans
-from train import inter_cluster_attn
 """
 Client, the unit of federated learning
 each stores its own data(implemented by DataLoader)
@@ -25,11 +24,7 @@ class Client():
         self.train_data = {}
         self.client_emb_vec = []
     
-    def train():
-        pass
 
-    def emb_params():
-        embed_vec()
     
 
 class Cluster():

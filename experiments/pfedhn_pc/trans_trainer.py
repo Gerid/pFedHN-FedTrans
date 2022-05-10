@@ -348,10 +348,15 @@ def train(data_name: str, data_path: str, classes_per_node: int, num_nodes: int,
 
             # model aggregation or grad aggregation?
             # some params needs tobe detach()
-            for i in range(intra_seq_len):
+            for i, c_id in enumerate(idx_list):
                 weight_list = intra_attn_mat[0,i,:]
                 state_dict = add2model(cluster.model, weighted_aggregate_model(client_grad_list, weight_list))
-                cluster.client_list[i].load_state_dict(state_dict) 
+                cluster.client_list[c_id].load_state_dict(state_dict) 
+            
+
+
+            
+
 
 
         
