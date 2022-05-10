@@ -13,8 +13,13 @@ def create_client(server=server, num_client=num_client, **args):
         client.per_layer = server.per_layer
 
 
-        
-    
+def add2model(model1, model2):
+    res = OrderedDict()
+    # ignore error that model1.state_dict().keys != model2.
+    for ((key, value),(key2,value2)) in zip(model1.state_dict().items(), model2.state_dict().items()):
+        res[key] = value + value2
+
+    return res
 
 def get_average_model(model_list):
     res = OrderedDict()

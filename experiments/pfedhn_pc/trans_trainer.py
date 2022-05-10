@@ -329,11 +329,14 @@ def train(data_name: str, data_path: str, classes_per_node: int, num_nodes: int,
             # random choice may cause duplicated?
             idx_list = [random.choice(range(len(cluster.client_list))) for _ in range(intra_seq_len)]
             client_model_list = []
+            client_grad_list = []
             for i in idx_list:
                 c_id = cluster.client_list[i].id
                 c_emb_vec = emb_vectors[c_id]    
                 cluster_emb_list.append(c_emb_vec)
                 client_model_list.append(nodes.models[c.id])
+                # get clients.grad
+                client_grad_list.append(nodes.models[c.id].grad)
 
             _, intra_attn_mat, _ = LSH_Attention(
                 dim = 128,
@@ -344,9 +347,11 @@ def train(data_name: str, data_path: str, classes_per_node: int, num_nodes: int,
             )
 
             # model aggregation or grad aggregation?
+            # some params needs tobe detach()
             for i in range(intra_seq_len):
                 weight_list = intra_attn_mat[0,i,:]
-                server.cluster_list[i].model = weighted_aggregate_model(c_model_list, weight_list)
+                state_dict = add2model(cluster.model, weighted_aggregate_model(client_grad_list, weight_list))
+                cluster.client_list[i].load_state_dict(state_dict) 
 
 
         
