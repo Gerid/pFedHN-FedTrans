@@ -12,14 +12,14 @@ each stores its own data(implemented by DataLoader)
 
 """
 class Client():
-    def __init__(self, id, base_layer, base_optimizer, optimizer_config, device, cluster_per_layer=None, cluster=None):
+    def __init__(self, c_id, base_layer, base_optimizer, optimizer_config, device, cluster_per_layer=None, cluster=None):
         # local model
         self.base_layer = base_layer
         self.base_optimzer = base_optimizer
-        self.per_layer = cluster_per_layer
+        self.per_layer = OrderedDict()
         self.per_optimizer = base_optimizer(self.per_layer.parameters(), **optimizer_config)
 
-        self.id = id #string
+        self.id = c_id #string
         self.cluster_id = -1 # default:-1, before form of cluster
         self.train_data = {}
         self.client_emb_vec = []
@@ -57,14 +57,6 @@ class Server():
             self.base_layer += self.client_list[i].base_layer.parameters()
         torch.div(self.base_layer, self.num_clients)
 
-    def pre_update(self):
-        for i in range(self.pre_update_eps):
-            self.assign_clients()
-            for i in range(self.num_clients):
-                self.base_layer = self.base_layer + self.client_list[i].base_layer.parameters()
-                self.per_layer = self.per_layer + self.client_list[i].per_layer.parameters()
-            self.base_layer = torch.div(self.base_layer, self.num_clients)
-            self.per_layer = torch.div(self.per_layer, self.num_clients)
     
     def form_cluster(self):
         #compute similarity k-means
@@ -83,69 +75,4 @@ class Server():
             #cluster.per_layer is the centroid per_model for clients within cluster
             cluster.per_layer = get_average_model(model_list)
 
-                  
-            
-
-
-
-
-    def add_client(self, client):
-        self.client_list.append(client)
-        self.assign_cluster(client)
-
-    def assign_cluster(client):
-        # TODO: add new client
-        # cluster_similarity
-        return client
-
-            
-    def assign_clients(self):
-        for client in self.client_list:
-            client.base_layer = self.base_layer
     
-    def client_update(self):
-        base_update = []
-        per_update = []
-
-        for client in self.client_list:
-            i_base_update, i_per_update = client.local_train() #client.local_train() returns w_base_layer, w_per_layer
-            base_update.append(i_base_update)
-            per_update.append(i_per_update)
-        return base_update, per_update
-    
-    
-class LSH_Attention():
-    model = Reformer(
-        dim = 512,
-        depth=12,
-        max_seq_len=8192,
-        heads=8,
-        lsh_dropout=0.1,
-        causal=True
-    ).cuda()
-
-
-    model = Recorder(model)
-
-    x = torch.randn(1, 8192, 512).cuda()
-    y = model(x)
-
-    # a list of attention weights and buckets for the first forward pass
-    model.recordings[0]
-
-    model.turn_off()  # stop recording
-    model.turn_on()  # start recording
-    model.clear()  # clear the recordings
-
-    model = model.eject()  # recover the original model and remove all listeners
-
-
-class Params_embed_layer(nn.Module):
-
-    def __init__(self, input_dim, emb_dim):
-        super(Params_embed_layer, self).__init__()
-        self.embed = nn.Linear(input_dim, emb_dim)
-
-    def forward(self, x):
-        x = self.embed(x)
-        return x
