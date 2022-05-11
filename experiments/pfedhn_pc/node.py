@@ -46,7 +46,7 @@ class BaseNodesForLocals_M:
         data_name,
         data_path,
         n_nodes,
-        base_model,
+        base_layer,
         layer_config,
         base_optimizer,
         optimizer_config,
@@ -62,7 +62,7 @@ class BaseNodesForLocals_M:
         self.batch_size = batch_size
     
         self.models = [
-            self.base_model(**layer_config).to(device) for _ in range(self.n_nodes)
+            base_layer(**layer_config).to(device) for _ in range(self.n_nodes)
         ]
         self.local_optimizers = [
             base_optimizer(self.local_layers[i].parameters(), **optimizer_config) for i in range(self.n_nodes)
