@@ -46,7 +46,7 @@ class BaseNodesForLocals_M:
         data_name,
         data_path,
         n_nodes,
-        base_layer,
+        base_model,
         layer_config,
         base_optimizer,
         optimizer_config,
@@ -62,10 +62,10 @@ class BaseNodesForLocals_M:
         self.batch_size = batch_size
     
         self.models = [
-            base_layer(**layer_config).to(device) for _ in range(self.n_nodes)
+            base_model(**layer_config).to(device) for _ in range(self.n_nodes)
         ]
         self.local_optimizers = [
-            base_optimizer(self.local_layers[i].parameters(), **optimizer_config) for i in range(self.n_nodes)
+            base_optimizer(self.models[i].parameters(), **optimizer_config) for i in range(self.n_nodes)
         ]
 
         self.train_loaders, self.val_loaders, self.test_loaders = gen_random_loaders(
@@ -80,5 +80,5 @@ class BaseNodesForLocals_M:
         return self.n_nodes
 
     def client_load_weights(self, model_dict):
-        for n in self.net:
+        for n in self.models:
             n.load_state_dict(model_dict)

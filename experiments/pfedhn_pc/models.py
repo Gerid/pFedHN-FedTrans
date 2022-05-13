@@ -105,7 +105,6 @@ class CNNTargetPC_M(nn.Module):
         self.fc1 = nn.Linear(2 * n_kernels * 5 * 5, 120)
         self.fc2 = nn.Linear(120, 84)
         self.nonlinearity = nonlinearity
-
         self.opt = nn.Linear(84, 10)
 
 
