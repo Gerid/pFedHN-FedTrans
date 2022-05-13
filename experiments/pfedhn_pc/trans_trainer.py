@@ -19,8 +19,8 @@ import copy
 from model import *
 from utils import get_model
 
-def eval_model(nodes, num_nodes, inet, net, criteria, device, split):
-    curr_results = evaluate(nodes, num_nodes, inet, net, criteria, device, split=split)
+def eval_model(nodes, num_nodes, net, criteria, device, split):
+    curr_results = evaluate(nodes, num_nodes, net, criteria, device, split=split)
     total_correct = sum([val['correct'] for val in curr_results.values()])
     total_samples = sum([val['total'] for val in curr_results.values()])
     avg_loss = np.mean([val['loss'] for val in curr_results.values()])
@@ -32,12 +32,11 @@ def eval_model(nodes, num_nodes, inet, net, criteria, device, split):
 
 
 @torch.no_grad()
-def evaluate(nodes: BaseNodesForLocal, num_nodes, inet, net, criteria, device, split='test'):
-    inet.eval()
+def evaluate(nodes: BaseNodesForLocal, num_nodes, net, criteria, device, split='test'):
+    net.eval()
     results = defaultdict(lambda: defaultdict(list))
 
     for node_id in range(num_nodes):  # iterating over nodes
-
         running_loss, running_correct, running_samples = 0., 0., 0.
         if split == 'test':
             curr_data = nodes.test_loaders[node_id]
@@ -46,13 +45,11 @@ def evaluate(nodes: BaseNodesForLocal, num_nodes, inet, net, criteria, device, s
         else:
             curr_data = nodes.train_loaders[node_id]
 
-        weights = inet(torch.tensor([node_id], dtype=torch.long).to(device))
-        net.load_state_dict(weights)
 
         for batch_count, batch in enumerate(curr_data):
             img, label = tuple(t.to(device) for t in batch)
             net_out = net(img)
-            pred = nodes.local_layers[node_id](net_out)
+            pred = nodes.models[node_id](net_out)
             running_loss += criteria(pred, label).item()
             running_correct += pred.argmax(1).eq(label).sum().item()
             running_samples += len(label)

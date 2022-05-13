@@ -28,7 +28,7 @@ class Client():
     
 
 class Cluster():
-    def __init__(self, cluster_model, c_id):
+    def __init__(self, c_id):
         self.cluster_id = c_id
         self.client_list = []# shape:[cluster_siz* cluster_size
         self.per_layer =  OrderedDict()

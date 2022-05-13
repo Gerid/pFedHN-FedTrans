@@ -15,7 +15,7 @@ def add2model(model1, model2):
 def get_average_model(model_list):
     res = OrderedDict()
     for model in model_list:
-        for k, v in model.state_dict():
+        for k, v in model.state_dict().items():
             if k in res.keys():
                 res[k] += v
             else:
