@@ -32,7 +32,7 @@ def eval_model(nodes, num_nodes, net, criteria, device, split):
 
 
 @torch.no_grad()
-def evaluate(nodes: BaseNodesForLocal, num_nodes, net, criteria, device, split='test'):
+def evaluate(nodes: BaseNodesForLocals_M, num_nodes, net, criteria, device, split='test'):
     net.eval()
     results = defaultdict(lambda: defaultdict(list))
 
@@ -296,6 +296,7 @@ def train(data_name: str, data_path: str, classes_per_node: int, num_nodes: int,
         c_model_list = [c.model for c in server.cluster_list]
 
         #nodes aggregation
+        #git test
         inter_attn = LSH_Attention(
             dim = 128,
             heads = 8,
